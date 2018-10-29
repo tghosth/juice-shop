@@ -76,8 +76,5 @@ module.exports = function login () {
       }).catch(error => {
         next(error)
       })
-        
-      
-  
   }
 }
