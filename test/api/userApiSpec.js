@@ -109,6 +109,14 @@ describe('/rest/user/authentication-details', () => {
         token: Joi.string()
       }).done(done)
   })
+
+  it('GET all users with password replaced by asterisks', done => {
+    frisby.get(REST_URL + '/user/authentication-details', { headers: authHeader })
+      .expect('status', 200)
+      .expect('json', 'data.?', {
+        password: '********************************'
+      }).done(done)
+  })
 })
 
 describe('/rest/user/whoami', () => {
@@ -121,7 +129,7 @@ describe('/rest/user/whoami', () => {
       }
     })
       .expect('status', 200)
-      .then(({json}) => frisby.get(REST_URL + '/user/whoami', { headers: { 'Authorization': 'Bearer ' + json.authentication.token } })
+      .then(({ json }) => frisby.get(REST_URL + '/user/whoami', { headers: { 'Authorization': 'Bearer ' + json.authentication.token } })
         .expect('status', 200)
         .expect('header', 'content-type', /application\/json/)
         .expect('jsonTypes', 'user', {

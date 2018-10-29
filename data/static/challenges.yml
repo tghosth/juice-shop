@@ -446,6 +446,9 @@
   hint: 'The leverage point for this challenge is the deprecated B2B interface.'
   hintUrl: 'https://bkimminich.gitbooks.io/pwning-owasp-juice-shop/content/part2/xxe.html#retrieve-the-content-of-cwindowssystemini-or-etcpasswd-from-the-server'
   key: xxeFileDisclosureChallenge
+  disabledEnv:
+  - Docker
+  - Heroku
 -
   name: 'XXE Tier 2'
   category: 'XXE'
@@ -454,6 +457,9 @@
   hint: 'It is not as easy as sending a large amount of data directly to the deprecated B2B interface.'
   hintUrl: 'https://bkimminich.gitbooks.io/pwning-owasp-juice-shop/content/part2/xxe.html#give-the-server-something-to-chew-on-for-quite-a-while'
   key: xxeDosChallenge
+  disabledEnv:
+  - Docker
+  - Heroku
 -
   name: 'RCE Tier 1'
   category: 'Insecure Deserialization'
@@ -486,3 +492,19 @@
   hint: 'Undoubtably you want to read our security policy before conducting any research on our application.'
   hintUrl: 'https://bkimminich.gitbooks.io/pwning-owasp-juice-shop/content/part2/roll-your-own-security.html#behave-like-any-white-hat-should'
   key: securityPolicyChallenge
+-
+  name: 'Steganography Tier 1'
+  category: 'Security through Obscurity'
+  description: '<a href="/#/contact">Rat out</a> a notorious character hiding in plain sight in the shop. (Mention the exact name of the character)'
+  difficulty: 4
+  hint: 'No matter how good your eyes are, you will need tool assistance for this challenge.'
+  hintUrl: 'https://bkimminich.gitbooks.io/pwning-owasp-juice-shop/content/part2/security-through-obscurity.html#rat-out-a-notorious-character-hiding-in-plain-sight-in-the-shop'
+  key: hiddenImageChallenge
+-
+  name: 'Supply Chain Attack'
+  category: 'Broken Authentication'
+  description: '<a href="/#/contact">Inform the development team</a> about a danger to some of <em>their</em> credentials. (Send them the URL of the <em>original report</em> or the CVE of this vulnerability)'
+  difficulty: 5
+  hint: 'This vulnerability will not affect any customer of the shop. It is aimed exclusively at its developers.'
+  hintUrl: 'https://bkimminich.gitbooks.io/pwning-owasp-juice-shop/content/part2/broken-authentication.html#inform-the-development-team-about-a-danger-to-some-of-their-credentials'
+  key: supplyChainAttackChallenge
