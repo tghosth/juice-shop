@@ -30,12 +30,24 @@ module.exports = function login () {
   return (req, res, next) => {
 
     if (req.body.email) {
-      disabled = appsensorutils.isUserDisabled(req.body.email);
+      actions = appsensorutils.GetUserResponseActions(req.body.email);
 
-      if (disabled) {
-        res.status(401).send('User Disabled!!!');
-        return;
+      for (var i = 0; i < actions.length; i++) {
+        action = actions[i];
+        if (action == appsensorutils.Actions.Disable) {
+          res.status(401).send('User Disabled!!!');
+          return;
+        }
+        else if (action == appsensorutils.Actions.SilentFail) {
+          res.status(401).send('Invalid email or password.')
+          return;
+        }
       }
+    }
+    else
+    {
+      res.status(401).send('Invalid email or password.')
+      return;
     }
       
     if (utils.notSolved(challenges.weakPasswordChallenge) && req.body.email === 'admin@' + config.get('application.domain') && req.body.password === 'admin123') {
