@@ -57,6 +57,7 @@ const captcha = require('./routes/captcha')
 const trackOrder = require('./routes/trackOrder')
 const countryMapping = require('./routes/countryMapping')
 const config = require('config')
+const honeyPotCalled = require('./routes/honeyPot')
 
 errorhandler.title = 'Juice Shop (Express ' + utils.version('express') + ')'
 
@@ -238,6 +239,9 @@ app.patch('/rest/product/reviews', insecurity.isAuthorized(), updateProductRevie
 
 /* B2B Order API */
 app.post('/b2b/v2/orders', b2bOrder())
+
+/* Honey Trap API */
+app.get('/rest/super-admin', honeyPotCalled())
 
 /* File Upload */
 app.post('/file-upload', upload.single('file'), fileUpload())
