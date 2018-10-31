@@ -5,7 +5,7 @@ const models = require('../models/index')
 const challenges = require('../data/datacache').challenges
 const users = require('../data/datacache').users
 const config = require('config')
-const appsensornodejs = require('appsensor-nodejs');
+const appsensornodejs = require('../../appsensor-nodejs');
 
 module.exports = function login () {
   function afterLogin (user, res, next) {
@@ -30,19 +30,31 @@ module.exports = function login () {
   return (req, res, next) => {
 
     if (req.body.email) {
-      actions = appsensorutils.GetUserResponseActions(req.body.email);
+      actions = appsensorutils.GetUserResponseActions();
 
       for (var i = 0; i < actions.length; i++) {
         action = actions[i];
-        if (action == appsensorutils.Actions.Disable) {
-          res.status(401).send('User Disabled!!!');
-          return;
-        }
-        else if (action == appsensorutils.Actions.SilentFail) {
-          res.status(401).send('Invalid email or password.')
-          return;
+        if (action.Username == req.body.email)
+        {
+          if (action.ActionType == appsensorutils.ActionTypes.Disable) {
+            res.status(401).send('User Disabled!!!');
+            return;
+          }
+          else if (action.ActionType == appsensorutils.ActionTypes.SilentFail) {
+            res.status(401).send('Invalid email or password.')
+            return;
+          }
         }
       }
+
+      if (req.body.password)
+      {
+        if (req.body.email == "honey@pot.com" && req.body.password == "password")
+        {
+          appsensornodejs.SendEvent(appsensornodejs.DetectionPoints.HT3, {username: "", SourceIP: req.socket.remoteAddress})
+        }
+      }
+
     }
     else
     {
@@ -79,9 +91,9 @@ module.exports = function login () {
           afterLogin(user, res, next)
         } else {
           if (req.body.password == undefined) {
-            appsensornodejs.SendEvent(req.body.email, appsensornodejs.DetectionPoints.AE8)
+            appsensornodejs.SendEvent(appsensornodejs.DetectionPoints.AE8, {username: req.body.email, SourceIP: req.socket.remoteAddress});
           } else {
-            appsensornodejs.SendEvent(req.body.email, appsensornodejs.DetectionPoints.AE2)
+            appsensornodejs.SendEvent(appsensornodejs.DetectionPoints.AE2, {username: req.body.email, SourceIP: req.socket.remoteAddress});
           }
           res.status(401).send('Invalid email or password.')
         }

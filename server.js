@@ -58,6 +58,7 @@ const trackOrder = require('./routes/trackOrder')
 const countryMapping = require('./routes/countryMapping')
 const config = require('config')
 const honeyPotCalled = require('./routes/honeyPot')
+const appsensorutils = require('./lib/appsensorutils')
 
 errorhandler.title = 'Juice Shop (Express ' + utils.version('express') + ')'
 
@@ -72,6 +73,22 @@ app.locals.captchaBypassReqTimes = []
 /* Bludgeon solution for possible CORS problems: Allow everything! */
 app.options('*', cors())
 app.use(cors())
+
+/* Check if IP is blocked */
+app.use((req, res, next) => {
+  actions = appsensorutils.GetUserResponseActions();
+  for (var i = 0; i < actions.length; i++) {
+    action = actions[i];
+    if (action.ActionType == appsensorutils.ActionTypes.BlockIP && action.SourceIP == req.socket.remoteAddress)
+    {
+      res.status(403).send("IP Blocked");
+      return;
+    }
+  }
+  next()
+});
+
+
 
 /* Security middleware */
 app.use(helmet.noSniff())
