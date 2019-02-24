@@ -33,21 +33,31 @@ exports.captchaBypassChallenge = () => (req, res, next) => {
   next()
 }
 
+exports.registerAdminChallenge = () => (req, res, next) => {
+  /* jshint eqeqeq:false */
+  if (utils.notSolved(challenges.registerAdminChallenge)) {
+    if (req.body && req.body.isAdmin && req.body.isAdmin) {
+      utils.solve(challenges.registerAdminChallenge)
+    }
+  }
+  next()
+}
+
 exports.accessControlChallenges = () => ({ url }, res, next) => {
-  if (utils.notSolved(challenges.scoreBoardChallenge) && utils.endsWith(url, '/scoreboard.png')) {
+  if (utils.notSolved(challenges.scoreBoardChallenge) && utils.endsWith(url, '/1px.png')) {
     utils.solve(challenges.scoreBoardChallenge)
-  } else if (utils.notSolved(challenges.adminSectionChallenge) && utils.endsWith(url, '/administration.png')) {
+  } else if (utils.notSolved(challenges.adminSectionChallenge) && utils.endsWith(url, '/19px.png')) {
     utils.solve(challenges.adminSectionChallenge)
-  } else if (utils.notSolved(challenges.tokenSaleChallenge) && utils.endsWith(url, '/tokensale.png')) {
+  } else if (utils.notSolved(challenges.tokenSaleChallenge) && utils.endsWith(url, '/56px.png')) {
     utils.solve(challenges.tokenSaleChallenge)
-  } else if (utils.notSolved(challenges.geocitiesThemeChallenge) && utils.endsWith(url, '/microfab.gif')) {
-    utils.solve(challenges.geocitiesThemeChallenge)
   } else if (utils.notSolved(challenges.extraLanguageChallenge) && utils.endsWith(url, '/tlh_AA.json')) {
     utils.solve(challenges.extraLanguageChallenge)
   } else if (utils.notSolved(challenges.retrieveBlueprintChallenge) && utils.endsWith(url, cache.retrieveBlueprintChallengeFile)) {
     utils.solve(challenges.retrieveBlueprintChallenge)
   } else if (utils.notSolved(challenges.securityPolicyChallenge) && utils.endsWith(url, '/security.txt')) {
     utils.solve(challenges.securityPolicyChallenge)
+  } else if (utils.notSolved(challenges.accessLogDisclosureChallenge) && url.match(/access\.log(0-9-)*/)) {
+    utils.solve(challenges.accessLogDisclosureChallenge)
   }
   next()
 }
@@ -65,6 +75,23 @@ exports.jwtChallenges = () => (req, res, next) => {
   }
   if (utils.notSolved(challenges.jwtTier2Challenge)) {
     jwtChallenge(challenges.jwtTier2Challenge, req, 'HS256', /rsa_lord@/)
+  }
+  next()
+}
+
+exports.serverSideChallenges = () => (req, res, next) => {
+  if (req.query.key === 'tRy_H4rd3r_n0thIng_iS_Imp0ssibl3') {
+    if (utils.notSolved(challenges.sstiChallenge) && req.app.locals.abused_ssti_bug === true) {
+      utils.solve(challenges.sstiChallenge)
+      res.status(204).send()
+      return
+    }
+
+    if (utils.notSolved(challenges.ssrfChallenge) && req.app.locals.abused_ssrf_bug === true) {
+      utils.solve(challenges.ssrfChallenge)
+      res.status(204).send()
+      return
+    }
   }
   next()
 }
@@ -100,8 +127,8 @@ exports.databaseRelatedChallenges = () => (req, res, next) => {
   if (utils.notSolved(challenges.typosquattingNpmChallenge)) {
     typosquattingNpmChallenge()
   }
-  if (utils.notSolved(challenges.typosquattingBowerChallenge)) {
-    typosquattingBowerChallenge()
+  if (utils.notSolved(challenges.typosquattingAngularChallenge)) {
+    typosquattingAngularChallenge()
   }
   if (utils.notSolved(challenges.hiddenImageChallenge)) {
     hiddenImageChallenge()
@@ -222,17 +249,17 @@ function typosquattingNpmChallenge () {
   })
 }
 
-function typosquattingBowerChallenge () {
-  models.Feedback.findAndCountAll({ where: { comment: { [Op.like]: '%angular-tooltipp%' } } }
+function typosquattingAngularChallenge () {
+  models.Feedback.findAndCountAll({ where: { comment: { [Op.like]: '%ng2-bar-rating%' } } }
   ).then(({ count }) => {
     if (count > 0) {
-      utils.solve(challenges.typosquattingBowerChallenge)
+      utils.solve(challenges.typosquattingAngularChallenge)
     }
   })
-  models.Complaint.findAndCountAll({ where: { message: { [Op.like]: '%angular-tooltipp%' } } }
+  models.Complaint.findAndCountAll({ where: { message: { [Op.like]: '%ng2-bar-rating%' } } }
   ).then(({ count }) => {
     if (count > 0) {
-      utils.solve(challenges.typosquattingBowerChallenge)
+      utils.solve(challenges.typosquattingAngularChallenge)
     }
   })
 }
