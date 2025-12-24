@@ -1,4 +1,9 @@
-import { Injectable } from '@angular/core'
+/*
+ * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * SPDX-License-Identifier: MIT
+ */
+
+import { Injectable, inject } from '@angular/core'
 import { HttpClient } from '@angular/common/http'
 import { environment } from '../../environments/environment'
 import { catchError, map } from 'rxjs/operators'
@@ -7,15 +12,13 @@ import { catchError, map } from 'rxjs/operators'
   providedIn: 'root'
 })
 export class TrackOrderService {
+  private readonly http = inject(HttpClient);
 
-  private hostServer = environment.hostServer
-  private host = this.hostServer + '/rest/track-order'
+  private readonly hostServer = environment.hostServer
+  private readonly host = this.hostServer + '/rest/track-order'
 
-  constructor (private http: HttpClient) { }
-
-  save (params) {
+  find (params: string) {
     params = encodeURIComponent(params)
-    return this.http.get(this.host + '/' + params).pipe(map((response: any) => response),catchError((error) => { throw error }))
+    return this.http.get(`${this.host}/${params}`).pipe(map((response: any) => response), catchError((error) => { throw error }))
   }
-
 }

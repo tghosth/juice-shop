@@ -1,200 +1,204 @@
-import { WindowRefService } from '../Services/window-ref.service'
-import { MatTableDataSource } from '@angular/material/table'
+import { Component, NgZone, type OnDestroy, type OnInit, inject } from '@angular/core'
+import { ActivatedRoute, Router } from '@angular/router'
 import { DomSanitizer } from '@angular/platform-browser'
+import { MatDialog } from '@angular/material/dialog'
+import { type Subscription, combineLatest, firstValueFrom } from 'rxjs'
+
+import { fromQueryParams, toQueryParams } from './filter-settings/query-params-converters'
+import { DEFAULT_FILTER_SETTING, type FilterSetting } from './filter-settings/FilterSetting'
+import { type Config, ConfigurationService } from '../Services/configuration.service'
+import { CodeSnippetComponent } from '../code-snippet/code-snippet.component'
 import { ChallengeService } from '../Services/challenge.service'
-import { ConfigurationService } from '../Services/configuration.service'
-import { Component, NgZone, OnInit } from '@angular/core'
+import { HintService } from '../Services/hint.service'
+import { filterChallenges } from './helpers/challenge-filtering'
 import { SocketIoService } from '../Services/socket-io.service'
-import { NgxSpinnerService } from 'ngx-spinner'
+import { type EnrichedChallenge } from './types/EnrichedChallenge'
+import { sortChallenges } from './helpers/challenge-sorting'
+import { TranslateModule } from '@ngx-translate/core'
+import { ChallengeCardComponent } from './components/challenge-card/challenge-card.component'
+import { TutorialModeWarningComponent } from './components/tutorial-mode-warning/tutorial-mode-warning.component'
+import { ChallengesUnavailableWarningComponent } from './components/challenges-unavailable-warning/challenges-unavailable-warning.component'
+import { MatProgressSpinner } from '@angular/material/progress-spinner'
+import { FilterSettingsComponent } from './components/filter-settings/filter-settings.component'
+import { NgClass } from '@angular/common'
+import { DifficultyOverviewScoreCardComponent } from './components/difficulty-overview-score-card/difficulty-overview-score-card.component'
+import { CodingChallengeProgressScoreCardComponent } from './components/coding-challenge-progress-score-card/coding-challenge-progress-score-card.component'
+import { HackingChallengeProgressScoreCardComponent } from './components/hacking-challenge-progress-score-card/hacking-challenge-progress-score-card.component'
 
-import { library, dom } from '@fortawesome/fontawesome-svg-core'
-import { faBook, faStar, faTrophy } from '@fortawesome/free-solid-svg-icons'
-import { faFlag, faGem } from '@fortawesome/free-regular-svg-icons'
-import { faGithub, faGitter, faDocker, faBtc } from '@fortawesome/free-brands-svg-icons'
-
-library.add(faBook, faStar, faFlag, faGem, faGitter, faGithub, faDocker, faBtc, faTrophy)
-dom.watch()
+interface ChallengeSolvedWebsocket {
+  key: string
+  name: string
+  challenge: string
+  flag: string
+  hidden: boolean
+  isRestore: boolean
+}
+interface CodeChallengeSolvedWebsocket {
+  key: string
+  codingChallengeStatus: 0 | 1 | 2
+}
 
 @Component({
   selector: 'app-score-board',
   templateUrl: './score-board.component.html',
-  styleUrls: ['./score-board.component.scss']
+  styleUrls: ['./score-board.component.scss'],
+  imports: [HackingChallengeProgressScoreCardComponent, CodingChallengeProgressScoreCardComponent, DifficultyOverviewScoreCardComponent, FilterSettingsComponent, MatProgressSpinner, ChallengesUnavailableWarningComponent, TutorialModeWarningComponent, ChallengeCardComponent, NgClass, TranslateModule]
 })
-export class ScoreBoardComponent implements OnInit {
+export class ScoreBoardComponent implements OnInit, OnDestroy {
+  private readonly challengeService = inject(ChallengeService);
+  private readonly hintService = inject(HintService);
+  private readonly configurationService = inject(ConfigurationService);
+  private readonly sanitizer = inject(DomSanitizer);
+  private readonly ngZone = inject(NgZone);
+  private readonly io = inject(SocketIoService);
+  private readonly dialog = inject(MatDialog);
+  private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
-  public scoreBoardTablesExpanded
-  public showSolvedChallenges
-  public allChallengeCategories = []
-  public displayedChallengeCategories = []
-  public displayedColumns = ['name','description','status']
-  public offsetValue = ['100%', '100%', '100%', '100%', '100%', '100%']
-  public allowRepeatNotifications
-  public showChallengeHints
-  public challenges: any[]
-  public percentChallengesSolved
+  public allChallenges: EnrichedChallenge[] = []
+  public filteredChallenges: EnrichedChallenge[] = []
+  public filterSetting: FilterSetting = structuredClone(DEFAULT_FILTER_SETTING)
+  public applicationConfiguration: Config | null = null
 
-  constructor (private configurationService: ConfigurationService,private challengeService: ChallengeService,private windowRefService: WindowRefService,private sanitizer: DomSanitizer, private ngZone: NgZone, private io: SocketIoService, private spinner: NgxSpinnerService) {}
+  public isInitialized = false
 
-  ngOnInit () {
-    this.spinner.show()
+  private readonly subscriptions: Subscription[] = []
 
-    this.scoreBoardTablesExpanded = localStorage.getItem('scoreBoardTablesExpanded') ? JSON.parse(localStorage.getItem('scoreBoardTablesExpanded')) : [null, true, false, false, false, false, false]
-    this.showSolvedChallenges = localStorage.getItem('showSolvedChallenges') ? JSON.parse(localStorage.getItem('showSolvedChallenges')) : true
+  ngOnInit (): void {
+    const dataLoaderSubscription = combineLatest([
+      this.challengeService.find({ sort: 'name' }),
+      this.hintService.getAll(),
+      this.configurationService.getApplicationConfiguration()
+    ]).subscribe(([challenges, hints, applicationConfiguration]) => {
+      this.applicationConfiguration = applicationConfiguration
 
-    this.configurationService.getApplicationConfiguration().subscribe((data: any) => {
-      this.allowRepeatNotifications = data.application.showChallengeSolvedNotifications && data.ctf.showFlagsInNotifications
-      this.showChallengeHints = data.application.showChallengeHints
-    },(err) => console.log(err))
-
-    this.challengeService.find().subscribe((challenges) => {
-      this.challenges = challenges
-      for (let i = 0; i < this.challenges.length; i++) {
-        if (this.challenges[i].hintUrl) {
-          if (this.challenges[i].hint) {
-            this.challenges[i].hint += ' Click for more hints.'
-          } else {
-            this.challenges[i].hint = 'Click to open hints.'
-          }
-        }
-        if (this.challenges[i].disabledEnv) {
-          this.challenges[i].hint = 'This challenge is unavailable in a ' + this.challenges[i].disabledEnv + ' environment!'
-        }
-        if (this.challenges[i].name === 'Score Board') {
-          this.challenges[i].solved = true
-        }
-        if (!this.allChallengeCategories.includes(challenges[i].category)) {
-          this.allChallengeCategories.push(challenges[i].category)
-        }
-      }
-      this.allChallengeCategories.sort()
-      this.displayedChallengeCategories = localStorage.getItem('displayedChallengeCategories') ? JSON.parse(localStorage.getItem('displayedChallengeCategories')) : this.allChallengeCategories
-      this.trustDescriptionHtml()
-      this.calculateProgressPercentage()
-      this.setOffset(challenges)
-
-      this.spinner.hide()
-    },(err) => {
-      this.challenges = undefined
-      console.log(err)
-    })
-
-    this.ngZone.runOutsideAngular(() => {
-      this.io.socket().on('challenge solved', (data) => {
-        if (data && data.challenge) {
-          for (let i = 0; i < this.challenges.length; i++) {
-            if (this.challenges[i].name === data.name) {
-              this.challenges[i].solved = true
-              break
-            }
-          }
-          this.calculateProgressPercentage()
-          this.setOffset(this.challenges)
+      const transformedChallenges = challenges.map((challenge) => {
+        return {
+          ...challenge,
+          hintText: hints.filter((hint) => hint.ChallengeId === challenge.id && hint.unlocked).map((hint) => hint.order + '. ' + hint.text).join('\n\n'),
+          nextHint: hints.filter((hint) => hint.ChallengeId === challenge.id && !hint.unlocked).sort((a, b) => a.order - b.order).map((hint) => hint.id)[0],
+          hintsUnlocked: hints.filter((hint) => hint.ChallengeId === challenge.id && hint.unlocked).length,
+          hintsAvailable: hints.filter((hint) => hint.ChallengeId === challenge.id).length,
+          tagList: challenge.tags ? challenge.tags.split(',').map((tag) => tag.trim()) : [],
+          originalDescription: challenge.description as string,
+          description: this.sanitizer.bypassSecurityTrustHtml(challenge.description as string)
         }
       })
+
+      this.allChallenges = transformedChallenges
+      this.filterAndUpdateChallenges()
+      this.isInitialized = true
+    })
+    this.subscriptions.push(dataLoaderSubscription)
+
+    const routerSubscription = this.route.queryParams.subscribe((queryParams) => {
+      this.filterSetting = fromQueryParams(queryParams)
+      this.filterAndUpdateChallenges()
+    })
+    this.subscriptions.push(routerSubscription)
+
+    this.io.socket().on('challenge solved', this.onChallengeSolvedWebsocket.bind(this))
+    this.io.socket().on('code challenge solved', this.onCodeChallengeSolvedWebsocket.bind(this))
+  }
+
+  ngOnDestroy (): void {
+    this.io.socket().off('challenge solved', this.onChallengeSolvedWebsocket.bind(this))
+    this.io.socket().off('code challenge solved', this.onCodeChallengeSolvedWebsocket.bind(this))
+    for (const subscription of this.subscriptions) {
+      subscription.unsubscribe()
+    }
+  }
+
+  onFilterSettingUpdate (filterSetting: FilterSetting) {
+    this.router.navigate([], {
+      queryParams: toQueryParams(filterSetting)
     })
   }
 
-  trustDescriptionHtml () {
-    for (let i = 0; i < this.challenges.length; i++) {
-      this.challenges[i].description = this.sanitizer.bypassSecurityTrustHtml(this.challenges[i].description)
+  onChallengeSolvedWebsocket (data?: ChallengeSolvedWebsocket) {
+    if (!data) {
+      return
     }
-  }
 
-  calculateProgressPercentage () {
-    let solvedChallenges = 0
-    for (let i = 0; i < this.challenges.length; i++) {
-      solvedChallenges += (this.challenges[i].solved) ? 1 : 0
-    }
-    this.percentChallengesSolved = (100 * solvedChallenges / this.challenges.length).toFixed(0)
-  }
-
-  setOffset (challenges) {
-    for (let difficulty = 1; difficulty <= 6; difficulty++) {
-      let solved = 0
-      let total = 0
-
-      for (let i = 0; i < challenges.length; i++) {
-        if (challenges[i].difficulty === difficulty) {
-          total++
-          if (challenges[i].solved) {
-            solved++
-          }
+    this.allChallenges = this.allChallenges.map((challenge) => {
+      if (challenge.key === data.key) {
+        return {
+          ...challenge,
+          solved: true
         }
       }
-
-      let offset: any = Math.round(solved * 100 / total)
-      offset = 100 - offset
-      offset = +offset + '%'
-      this.offsetValue[difficulty - 1] = offset
-    }
-  }
-
-  toggleDifficulty (difficulty) {
-    this.scoreBoardTablesExpanded[difficulty] = !this.scoreBoardTablesExpanded[difficulty]
-    localStorage.setItem('scoreBoardTablesExpanded',JSON.stringify(this.scoreBoardTablesExpanded))
-  }
-
-  toggleShowSolvedChallenges () {
-    this.showSolvedChallenges = !this.showSolvedChallenges
-    localStorage.setItem('showSolvedChallenges', JSON.stringify(this.showSolvedChallenges))
-  }
-
-  toggleShowChallengeCategory (category) {
-    if (!this.displayedChallengeCategories.includes(category)) {
-      this.displayedChallengeCategories.push(category)
-    } else {
-      this.displayedChallengeCategories = this.displayedChallengeCategories.filter((c) => c !== category)
-    }
-    localStorage.setItem('displayedChallengeCategories',JSON.stringify(this.displayedChallengeCategories))
-  }
-
-  repeatNotification (challenge) {
-    if (this.allowRepeatNotifications) {
-      this.challengeService.repeatNotification(encodeURIComponent(challenge.name)).subscribe(() => {
-        this.windowRefService.nativeWindow.scrollTo(0, 0)
-      },(err) => console.log(err))
-    }
-  }
-
-  openHint (challenge) {
-    if (this.showChallengeHints && challenge.hintUrl) {
-      this.windowRefService.nativeWindow.open(challenge.hintUrl, '_blank')
-    }
-  }
-
-  filterToDataSource (challenges,difficulty,key) {
-    if (!challenges) {
-      return []
-    }
-
-    challenges = challenges.filter((challenge) => challenge.difficulty === difficulty)
-    if (!this.showSolvedChallenges) {
-      challenges = challenges.filter((challenge) => !challenge.solved)
-    }
-    challenges = challenges.filter((challenge) => this.displayedChallengeCategories.includes(challenge.category))
-
-    challenges = challenges.sort((challenge1: any, challenge2: any) => {
-      let x = challenge1[key]
-      let y = challenge2[key]
-      return ((x < y) ? -1 : ((x > y) ? 1 : 0))
+      return { ...challenge }
     })
-
-    let dataSource = new MatTableDataSource()
-    dataSource.data = challenges
-    return dataSource
+    this.filterAndUpdateChallenges()
+    // manually trigger angular change detection... :(
+    // unclear why this is necessary, possibly because the socket.io callback is not running inside angular
+    this.ngZone.run(() => {})
   }
 
-  filterChallengesByDifficulty (difficulty) {
-    if (!this.challenges) {
-      return []
+  onCodeChallengeSolvedWebsocket (data?: CodeChallengeSolvedWebsocket) {
+    if (!data) {
+      return
     }
-    return this.challenges.filter((challenge) => challenge.difficulty === difficulty)
+
+    this.allChallenges = this.allChallenges.map((challenge) => {
+      if (challenge.key === data.key) {
+        return {
+          ...challenge,
+          codingChallengeStatus: data.codingChallengeStatus
+        }
+      }
+      return { ...challenge }
+    })
+    this.filterAndUpdateChallenges()
+    // manually trigger angular change detection... :(
+    // unclear why this is necessary, possibly because the socket.io callback is not running inside angular
+    this.ngZone.run(() => {})
   }
 
-  filterSolvedChallengesOfDifficulty (difficulty) {
-    if (!this.challenges) {
-      return []
-    }
-    return this.challenges.filter((challenge) => challenge.difficulty === difficulty && challenge.solved === true)
+  filterAndUpdateChallenges (): void {
+    this.filteredChallenges = sortChallenges(
+      filterChallenges(this.allChallenges, {
+        ...this.filterSetting,
+        restrictToTutorialChallengesFirst: this.applicationConfiguration?.challenges?.restrictToTutorialsFirst ?? true
+      })
+    )
+  }
+
+  // angular helper to speed up challenge rendering
+  getChallengeKey (index: number, challenge: EnrichedChallenge): string {
+    return challenge.key
+  }
+
+  reset () {
+    this.router.navigate([], {
+      queryParams: toQueryParams(DEFAULT_FILTER_SETTING)
+    })
+  }
+
+  openCodingChallengeDialog (challengeKey: string) {
+    const challenge = this.allChallenges.find((challenge) => challenge.key === challengeKey)
+
+    this.dialog.open(CodeSnippetComponent, {
+      disableClose: true,
+      data: {
+        key: challengeKey,
+        name: challenge.name,
+        codingChallengeStatus: challenge.codingChallengeStatus
+      }
+    })
+  }
+
+  async repeatChallengeNotification (challengeKey: string) {
+    const challenge = this.allChallenges.find((challenge) => challenge.key === challengeKey)
+    await firstValueFrom(this.challengeService.repeatNotification(encodeURIComponent(challenge.name)))
+  }
+
+  unlockHint (hintId: number) {
+    this.hintService.put(hintId, { unlocked: true }).subscribe({
+      next: () => {
+        this.ngOnInit()
+      },
+      error: (err) => { console.log(err) }
+    })
   }
 }

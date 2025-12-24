@@ -7,18 +7,31 @@ app/
 uploads/complaints/*.*
 !uploads/complaints/.gitkeep
 ftp/legal.md
+package-lock.json
+i18n/*.json
+i18n/*.invalid
+!frontend/src/assets/i18n/*.json
+!data/static/i18n/*.json
+data/chatbot/*.*
+!data/chatbot/.gitkeep
+/data/juiceshop.sqlite-journal
 
 # Build
 .nyc_output/
 .sass-cache/
 build/
+cache/
 dist/
 logs/
 vagrant/.vagrant/
 *.orig
 *.out
 *.log
-package-lock.json
+JSON
+JSON.map
+frontend/src/**/*.js
+/bom.json
+/bom.xml
 
 # IDEs
 .idea/
@@ -35,13 +48,20 @@ assets/
 
 # Custom configuration files
 config/*.yml
+!config/addo.yml
 !config/bodgeit.yml
 !config/ctf.yml
 !config/fbctf.yml
 !config/default.yml
-!config/sickshop.yml
 !config/juicebox.yml
 !config/quiet.yml
 !config/test.yml
 !config/7ms.yml
 !config/mozilla.yml
+!config/unsafe.yml
+!config/tutorial.yml
+!config/oss.yml
+!config/defcon33.yml
+
+# System Files
+.DS_Store

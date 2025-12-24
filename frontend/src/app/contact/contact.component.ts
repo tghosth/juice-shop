@@ -1,74 +1,121 @@
+/*
+ * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * SPDX-License-Identifier: MIT
+ */
+
 import { FeedbackService } from '../Services/feedback.service'
 import { CaptchaService } from '../Services/captcha.service'
 import { UserService } from '../Services/user.service'
-import { FormControl, Validators } from '@angular/forms'
-import { Component, OnInit } from '@angular/core'
-import { library, dom } from '@fortawesome/fontawesome-svg-core'
+import { UntypedFormControl, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { Component, type OnInit, inject } from '@angular/core'
+import { library } from '@fortawesome/fontawesome-svg-core'
 import { faPaperPlane, faStar } from '@fortawesome/free-solid-svg-icons'
 import { FormSubmitService } from '../Services/form-submit.service'
+import { TranslateService, TranslateModule } from '@ngx-translate/core'
+import { SnackBarHelperService } from '../Services/snack-bar-helper.service'
+import { MatButtonModule } from '@angular/material/button'
+import { MatSliderModule } from '@angular/material/slider'
+
+import { MatInputModule } from '@angular/material/input'
+import { MatFormFieldModule, MatLabel, MatHint, MatError } from '@angular/material/form-field'
+import { MatCardModule } from '@angular/material/card'
+
+import { MatIconModule } from '@angular/material/icon'
 
 library.add(faStar, faPaperPlane)
-dom.watch()
 
 @Component({
   selector: 'app-contact',
   templateUrl: './contact.component.html',
-  styleUrls: ['./contact.component.scss']
+  styleUrls: ['./contact.component.scss'],
+  imports: [MatCardModule, TranslateModule, FormsModule, ReactiveFormsModule, MatFormFieldModule, MatLabel, MatInputModule, MatHint, MatError, MatSliderModule, MatButtonModule, MatIconModule]
 })
 export class ContactComponent implements OnInit {
+  private readonly userService = inject(UserService);
+  private readonly captchaService = inject(CaptchaService);
+  private readonly feedbackService = inject(FeedbackService);
+  private readonly formSubmitService = inject(FormSubmitService);
+  private readonly translate = inject(TranslateService);
+  private readonly snackBarHelperService = inject(SnackBarHelperService);
 
-  public authorControl: FormControl = new FormControl({ value: '', disabled: true }, [])
-  public feedbackControl: FormControl = new FormControl('', [Validators.required, Validators.maxLength(160)])
-  public captchaControl: FormControl = new FormControl('', [Validators.required])
-  public userIdControl: FormControl = new FormControl('', [])
-  public rating: number = 0
+  public authorControl: UntypedFormControl = new UntypedFormControl({ value: '', disabled: true }, [])
+  public feedbackControl: UntypedFormControl = new UntypedFormControl('', [Validators.required, Validators.maxLength(160)])
+  public captchaControl: UntypedFormControl = new UntypedFormControl('', [Validators.required, Validators.pattern('-?[\\d]*')])
+  public userIdControl: UntypedFormControl = new UntypedFormControl('', [])
+  public rating = 0
   public feedback: any = undefined
   public captcha: any
   public captchaId: any
   public confirmation: any
   public error: any
 
-  constructor (private userService: UserService, private captchaService: CaptchaService, private feedbackService: FeedbackService, private formSubmitService: FormSubmitService) { }
+  ngOnInit (): void {
+    this.userService.whoAmI().subscribe({
+      next: (data: any) => {
+        this.feedback = {}
+        this.userIdControl.setValue(data.id)
+        this.feedback.UserId = data.id
 
-  ngOnInit () {
-    this.userService.whoAmI().subscribe((data: any) => {
-      this.feedback = {}
-      this.userIdControl.setValue(data.id)
-      this.feedback.UserId = data.id
-      this.authorControl.setValue(data.email || 'anonymous')
-    }, (err) => {
-      this.feedback = undefined
-      console.log(err)
+        this.authorControl.setValue(data.email ? `***${data.email.slice(3)}` : 'anonymous')
+      },
+      error: (err) => {
+        this.feedback = undefined
+        console.log(err)
+      }
     })
     this.getNewCaptcha()
 
-    this.formSubmitService.attachEnterKeyHandler('feedback-form', 'submitButton', () => this.save())
+    this.formSubmitService.attachEnterKeyHandler('feedback-form', 'submitButton', () => { this.save() })
   }
 
   getNewCaptcha () {
-    this.captchaService.getCaptcha().subscribe((data: any) => {
-      this.captcha = data.captcha
-      this.captchaId = data.captchaId
-    }, (err) => err)
+    this.captchaService.getCaptcha().subscribe({
+      next: (data: any) => {
+        this.captcha = data.captcha
+        this.captchaId = data.captchaId
+      },
+      error: (err) => err
+    })
   }
 
   save () {
     this.feedback.captchaId = this.captchaId
     this.feedback.captcha = this.captchaControl.value
-    this.feedback.comment = this.feedbackControl.value
+
+    this.feedback.comment = `${this.feedbackControl.value} (${this.authorControl.value})`
     this.feedback.rating = this.rating
     this.feedback.UserId = this.userIdControl.value
-    this.feedbackService.save(this.feedback).subscribe((savedFeedback) => {
-      this.error = null
-      this.confirmation = 'Thank you for your feedback' + (savedFeedback.rating === 5 ? ' and your 5-star rating!' : '.')
-      this.feedback = {}
-      this.ngOnInit()
-      this.resetForm()
-    }, (error) => {
-      this.error = error.error
-      this.confirmation = null
-      this.feedback = {}
-      this.resetForm()
+    this.feedbackService.save(this.feedback).subscribe({
+      next: (savedFeedback) => {
+        if (savedFeedback.rating === 5) {
+          this.translate.get('FEEDBACK_FIVE_STAR_THANK_YOU').subscribe({
+            next: (feedbackThankYou) => {
+              this.snackBarHelperService.open(feedbackThankYou)
+            },
+            error: (translationId) => {
+              this.snackBarHelperService.open(translationId)
+            }
+          })
+        } else {
+          this.translate.get('FEEDBACK_THANK_YOU').subscribe({
+            next: (feedbackThankYou) => {
+              this.snackBarHelperService.open(feedbackThankYou)
+            },
+            error: (translationId) => {
+              this.snackBarHelperService.open(translationId)
+            }
+          })
+        }
+        this.feedback = {}
+        this.ngOnInit()
+        this.resetForm()
+      },
+      error: (err) => {
+        console.log(err)
+        this.snackBarHelperService.open(err.error, 'errorBar')
+        this.feedback = {}
+        this.resetCaptcha()
+      }
     })
   }
 
@@ -79,9 +126,19 @@ export class ContactComponent implements OnInit {
     this.feedbackControl.markAsUntouched()
     this.feedbackControl.markAsPristine()
     this.feedbackControl.setValue('')
+    this.rating = 0
     this.captchaControl.markAsUntouched()
     this.captchaControl.markAsPristine()
     this.captchaControl.setValue('')
   }
 
+  resetCaptcha () {
+    this.captchaControl.markAsUntouched()
+    this.captchaControl.markAsPristine()
+    this.captchaControl.setValue('')
+  }
+
+  formatRating (value: number) {
+    return `${value}★`
+  }
 }

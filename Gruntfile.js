@@ -1,12 +1,28 @@
+/*
+ * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * SPDX-License-Identifier: MIT
+ */
+
 'use strict'
 
 module.exports = function (grunt) {
-  var node = grunt.option('node') || process.env.nodejs_version || process.env.TRAVIS_NODE_VERSION || ''
-  var platform = grunt.option('platform') || process.env.PLATFORM || process.env.TRAVIS ? 'x64' : ''
-  var os = grunt.option('os') || process.env.APPVEYOR ? 'windows' : process.env.TRAVIS ? 'linux' : ''
+  const os = grunt.option('os') || process.env.PCKG_OS_NAME || ''
+  const platform = grunt.option('platform') || process.env.PCKG_CPU_ARCH || ''
+  const node = grunt.option('node') || process.env.nodejs_version || process.env.PCKG_NODE_VERSION || ''
 
   grunt.initConfig({
     pkg: grunt.file.readJSON('package.json'),
+
+    replace_json: {
+      manifest: {
+        src: 'package.json',
+        changes: {
+          'engines.node': (node || '<%= pkg.engines.node %>'),
+          os: (os ? [os] : '<%= pkg.os %>'),
+          cpu: (platform ? [platform] : '<%= pkg.cpu %>')
+        }
+      }
+    },
 
     compress: {
       pckg: {
@@ -17,24 +33,34 @@ module.exports = function (grunt) {
         files: [
           {
             src: [
+              '.well-known/**',
+              'LICENSE',
               '*.md',
-              'app.js',
-              'server.js',
               'package.json',
               'ctf.key',
               'swagger.yml',
-              'frontend/dist/frontend/**',
+              'server.ts',
+              'config.schema.yml',
+              'build/**',
+              '!build/reports/**',
+              'bom.json',
+              'bom.xml',
               'config/*.yml',
-              'data/*.js',
+              'data/*.ts',
               'data/static/**',
+              'data/chatbot/.gitkeep',
               'encryptionkeys/**',
+              'frontend/dist/frontend/**',
+              'frontend/dist/bom/**',
+              'frontend/src/**/*.ts',
               'ftp/**',
+              'i18n/.gitkeep',
               'lib/**',
-              'models/*.js',
-              'routes/*.js',
+              'models/*.ts',
               'node_modules/**',
-              'views/**',
-              'uploads/complaints/.gitkeep'
+              'routes/*.ts',
+              'uploads/complaints/.gitkeep',
+              'views/**'
             ],
             dest: 'juice-shop_<%= pkg.version %>/'
           }
@@ -43,6 +69,22 @@ module.exports = function (grunt) {
     }
   })
 
+  grunt.registerTask('checksum', 'Create .md5 checksum files', function () {
+    const fs = require('node:fs')
+    const crypto = require('node:crypto')
+    fs.readdirSync('dist/').forEach(file => {
+      const buffer = fs.readFileSync('dist/' + file)
+      const md5 = crypto.createHash('md5')
+      md5.update(buffer)
+      const md5Hash = md5.digest('hex')
+      const md5FileName = 'dist/' + file + '.md5'
+      grunt.file.write(md5FileName, md5Hash)
+      grunt.log.write(`Checksum ${md5Hash} written to file ${md5FileName}.`).verbose.write('...').ok()
+      grunt.log.writeln()
+    })
+  })
+
+  grunt.loadNpmTasks('grunt-replace-json')
   grunt.loadNpmTasks('grunt-contrib-compress')
-  grunt.registerTask('package', [ 'compress:pckg' ])
+  grunt.registerTask('package', ['replace_json:manifest', 'compress:pckg', 'checksum'])
 }

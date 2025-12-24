@@ -1,12 +1,15 @@
 {
-  "extends": "../tsconfig.json",
+  "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "../out-tsc/app",
-    "module": "es2015",
+    "module": "ES2022",
+    "allowSyntheticDefaultImports": true,
     "types": []
   },
-  "exclude": [
-    "src/test.ts",
-    "**/*.spec.ts"
+  "files": [
+    "main.ts"
+  ],
+  "include": [
+    "**/*.d.ts"
   ]
 }

@@ -1,29 +1,46 @@
-import { TranslateModule, TranslateService } from '@ngx-translate/core'
-import { BarRatingModule } from 'ng2-bar-rating'
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations'
-import { ChallengeService } from '../Services/challenge.service'
-import { ConfigurationService } from '../Services/configuration.service'
-import { WindowRefService } from '../Services/window-ref.service'
-import { HttpClientModule } from '@angular/common/http'
-import { MatExpansionModule } from '@angular/material/expansion'
-import { MatProgressBarModule } from '@angular/material/progress-bar'
-import { MatDividerModule } from '@angular/material/divider'
-import { MatButtonModule } from '@angular/material/button'
-import { MatTableModule } from '@angular/material/table'
-import { MatCardModule } from '@angular/material/card'
-import { MatTooltipModule } from '@angular/material/tooltip'
-import { MatButtonToggleModule } from '@angular/material/button-toggle'
-import { NgxSpinnerModule } from 'ngx-spinner'
-import { async, ComponentFixture, fakeAsync, TestBed } from '@angular/core/testing'
-import { ScoreBoardComponent } from './score-board.component'
-import { of, throwError } from 'rxjs'
-import { DomSanitizer } from '@angular/platform-browser'
-import { EventEmitter } from '@angular/core'
-import { SocketIoService } from '../Services/socket-io.service'
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner'
+import { provideHttpClientTesting } from '@angular/common/http/testing'
+import { type ComponentFixture, TestBed } from '@angular/core/testing'
+import { RouterTestingModule } from '@angular/router/testing'
+import { MatDialogModule } from '@angular/material/dialog'
+import { MatIconModule } from '@angular/material/icon'
+import { TranslateModule } from '@ngx-translate/core'
+import { of } from 'rxjs'
 
-class MockSocket {
-  on (str: string, callback) {
-    callback(str)
+import { HackingChallengeProgressScoreCardComponent } from './components/hacking-challenge-progress-score-card/hacking-challenge-progress-score-card.component'
+import { CodingChallengeProgressScoreCardComponent } from './components/coding-challenge-progress-score-card/coding-challenge-progress-score-card.component'
+import { ChallengesUnavailableWarningComponent } from './components/challenges-unavailable-warning/challenges-unavailable-warning.component'
+import { DifficultyOverviewScoreCardComponent } from './components/difficulty-overview-score-card/difficulty-overview-score-card.component'
+import { TutorialModeWarningComponent } from './components/tutorial-mode-warning/tutorial-mode-warning.component'
+import { WarningCardComponent } from './components/warning-card/warning-card.component'
+import { ScoreCardComponent } from './components/score-card/score-card.component'
+import { ScoreBoardComponent } from './score-board.component'
+import { ConfigurationService } from '../Services/configuration.service'
+import { CodeSnippetService } from '../Services/code-snippet.service'
+import { ChallengeService } from '../Services/challenge.service'
+import { type Challenge } from '../Models/challenge.model'
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
+import { HintService } from '../Services/hint.service'
+
+// allows to easily create a challenge with some overwrites
+function createChallenge (challengeOverwrites: Partial<Challenge>): Challenge {
+  return {
+    name: 'foobar',
+    key: 'challenge-1',
+    category: 'category-blue',
+    difficulty: 3,
+    description: '',
+    tags: '',
+    disabledEnv: null,
+    solved: false,
+    tutorialOrder: null,
+    hasTutorial: false,
+    hasSnippet: false,
+    codingChallengeStatus: 0,
+    mitigationUrl: '',
+    hasCodingChallenge: false,
+    ...challengeOverwrites
   }
 }
 
@@ -31,270 +48,160 @@ describe('ScoreBoardComponent', () => {
   let component: ScoreBoardComponent
   let fixture: ComponentFixture<ScoreBoardComponent>
   let challengeService
-  let configurationService
-  let windowRefService
-  let translateService
-  let sanitizer
-  let socketIoService
-  let mockSocket
+  let hintService
+  let codeSnippetService
+  let configService
 
-  beforeEach(async(() => {
-
-    challengeService = jasmine.createSpyObj('ChallengeService',['find','repeatNotification'])
-    challengeService.find.and.returnValue(of([{}]))
-    challengeService.repeatNotification.and.returnValue(of({}))
-    configurationService = jasmine.createSpyObj('ConfigurationService',['getApplicationConfiguration'])
-    configurationService.getApplicationConfiguration.and.returnValue(of({ application: {} }))
-    // windowRefService = {
-    //   get nativeWindow () {
-    //     return {
-    //       scrollTo: (a,b) => null
-    //     }
-    //   }
-    // }
-    translateService = jasmine.createSpyObj('TranslateService', ['get'])
-    translateService.get.and.returnValue(of({}))
-    translateService.onLangChange = new EventEmitter()
-    translateService.onTranslationChange = new EventEmitter()
-    translateService.onDefaultLangChange = new EventEmitter()
-    sanitizer = jasmine.createSpyObj('DomSanitizer',['bypassSecurityTrustHtml','sanitize'])
-    sanitizer.bypassSecurityTrustHtml.and.callFake((args) => args)
-    sanitizer.sanitize.and.returnValue({})
-    mockSocket = new MockSocket()
-    socketIoService = jasmine.createSpyObj('SocketIoService', ['socket'])
-    socketIoService.socket.and.returnValue(mockSocket)
-
-    TestBed.configureTestingModule({
-      imports: [
-        HttpClientModule,
-        TranslateModule.forRoot(),
-        BarRatingModule,
-        BrowserAnimationsModule,
-        NgxSpinnerModule,
-        MatCardModule,
-        MatTableModule,
-        MatButtonModule,
-        MatDividerModule,
-        MatProgressBarModule,
-        MatExpansionModule,
-        MatTooltipModule,
-        MatButtonToggleModule
-      ],
-      declarations: [ ScoreBoardComponent ],
+  beforeEach(async () => {
+    challengeService = jasmine.createSpyObj('ChallengeService', ['find'])
+    hintService = jasmine.createSpyObj('HintService', ['getAll'])
+    codeSnippetService = jasmine.createSpyObj('CodeSnippetService', [
+      'challenges'
+    ])
+    configService = jasmine.createSpyObj('ConfigurationService', [
+      'getApplicationConfiguration'
+    ])
+    await TestBed.configureTestingModule({
+      imports: [TranslateModule.forRoot(),
+        RouterTestingModule,
+        MatProgressSpinnerModule,
+        MatDialogModule,
+        MatIconModule,
+        ScoreBoardComponent,
+        HackingChallengeProgressScoreCardComponent,
+        CodingChallengeProgressScoreCardComponent,
+        DifficultyOverviewScoreCardComponent,
+        WarningCardComponent,
+        ChallengesUnavailableWarningComponent,
+        TutorialModeWarningComponent,
+        ScoreCardComponent,
+        BrowserAnimationsModule],
       providers: [
-        { provide: TranslateService, useValue: translateService },
         { provide: ChallengeService, useValue: challengeService },
-        { provide: ConfigurationService, useValue: configurationService },
-        { provide: DomSanitizer, useValue: sanitizer },
-        { provide: SocketIoService, useValue: socketIoService },
-        WindowRefService
+        { provide: HintService, useValue: hintService },
+        { provide: CodeSnippetService, useValue: codeSnippetService },
+        { provide: ConfigurationService, useValue: configService },
+        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClientTesting()
       ]
-    })
-    .compileComponents()
+    }).compileComponents()
 
-    windowRefService = TestBed.get(WindowRefService)
-  }))
+    challengeService.find.and.returnValue(
+      of([
+        createChallenge({
+          name: 'Challenge 1',
+          key: 'challenge-1',
+          category: 'category-blue',
+          difficulty: 1,
+          solved: true
+        }),
+        createChallenge({
+          name: 'Challenge 2',
+          key: 'challenge-2',
+          category: 'category-blue',
+          difficulty: 5,
+          solved: false,
+          hasSnippet: true,
+          codingChallengeStatus: 1
+        }),
+        createChallenge({
+          name: 'Challenge 3',
+          key: 'challenge-3',
+          category: 'category-red',
+          difficulty: 3,
+          hasSnippet: true,
+          solved: false
+        })
+      ])
+    )
 
-  beforeEach(() => {
+    hintService.getAll.and.returnValue(of([]))
+
+    codeSnippetService.challenges.and.returnValue(of(['challenge-2']))
+    configService.getApplicationConfiguration.and.returnValue(
+      of({
+        challenges: {
+          restrictToTutorialsFirst: false,
+          codingChallengesEnabled: 'solved',
+          showHints: true,
+          showMitigations: true
+        },
+        ctf: {
+          showFlagsInNotifications: true
+        },
+        hackingInstructor: {
+          isEnabled: true
+        }
+      })
+    )
+
     fixture = TestBed.createComponent(ScoreBoardComponent)
     component = fixture.componentInstance
     fixture.detectChanges()
   })
 
-  it('should create', () => {
-    expect(component).toBeTruthy()
+  it('should not filter any challenges on default settings', (): void => {
+    expect(component.filteredChallenges).toHaveSize(3)
   })
 
-  it('should hold existing challenges', () => {
-    challengeService.find.and.returnValue(of([ { description: 'XSS' }, { description: 'CSRF' } ]))
-    component.ngOnInit()
-    expect(component.challenges.length).toBe(2)
-    expect(component.challenges[0].description).toBe('XSS')
-    expect(component.challenges[1].description).toBe('CSRF')
+  it('should mark challenges as solved on "challenge solved" websocket', (): void => {
+    expect(
+      component.filteredChallenges.find(
+        (challenge) => challenge.key === 'challenge-3'
+      ).solved
+    ).toBeFalse()
+
+    component.onChallengeSolvedWebsocket({
+      key: 'challenge-3',
+      name: '',
+      challenge: '',
+      flag: '',
+      hidden: false,
+      isRestore: false
+    })
+
+    expect(
+      component.filteredChallenges.find(
+        (challenge) => challenge.key === 'challenge-3'
+      ).solved
+    ).toBeTrue()
   })
 
-  it('should log the error on retrieving configuration', fakeAsync(() => {
-    configurationService.getApplicationConfiguration.and.returnValue(throwError('Error'))
-    console.log = jasmine.createSpy('log')
-    component.ngOnInit()
-    expect(console.log).toHaveBeenCalledWith('Error')
-  }))
+  it('should mark find it code challenges as solved on "code challenge solved" websocket', (): void => {
+    expect(
+      component.filteredChallenges.find(
+        (challenge) => challenge.key === 'challenge-3'
+      ).codingChallengeStatus
+    ).toBe(0)
 
-  it('should be able to toggle the difficulty and save it in localStorage', () => {
-    component.scoreBoardTablesExpanded[2] = false
-    spyOn(localStorage,'setItem')
-    component.toggleDifficulty(2)
-    expect(component.scoreBoardTablesExpanded[2]).toBe(true)
-    expect(localStorage.setItem).toHaveBeenCalledWith('scoreBoardTablesExpanded', JSON.stringify(component.scoreBoardTablesExpanded))
+    component.onCodeChallengeSolvedWebsocket({
+      key: 'challenge-3',
+      codingChallengeStatus: 1
+    })
+
+    expect(
+      component.filteredChallenges.find(
+        (challenge) => challenge.key === 'challenge-3'
+      ).codingChallengeStatus
+    ).toBe(1)
   })
 
-  it('should consider challenge description as trusted HTML', () => {
-    challengeService.find.and.returnValue(of([ { description: '<a src="link">Link</a>' } ]))
-    component.ngOnInit()
-    expect(sanitizer.bypassSecurityTrustHtml).toHaveBeenCalledWith('<a src="link">Link</a>')
+  it('should mark fix it code challenges as solved on "code challenge solved" websocket', (): void => {
+    expect(
+      component.filteredChallenges.find(
+        (challenge) => challenge.key === 'challenge-2'
+      ).codingChallengeStatus
+    ).toBe(1)
+
+    component.onCodeChallengeSolvedWebsocket({
+      key: 'challenge-2',
+      codingChallengeStatus: 2
+    })
+
+    expect(
+      component.filteredChallenges.find(
+        (challenge) => challenge.key === 'challenge-2'
+      ).codingChallengeStatus
+    ).toBe(2)
   })
-
-  it('should calculate percent of challenges solved', () => {
-    challengeService.find.and.returnValue(of([ { solved: true }, { solved: true }, { solved: false } ]))
-    component.ngOnInit()
-    expect(component.percentChallengesSolved).toBe('67')
-  })
-
-  it('should hold nothing when no challenges exists', () => {
-    challengeService.find.and.returnValue(of([]))
-    component.ngOnInit()
-    expect(component.challenges).toEqual([])
-  })
-
-  it('should hold nothing on error from backend API and log the error', fakeAsync(() => {
-    challengeService.find.and.returnValue(throwError('Error'))
-    console.log = jasmine.createSpy('log')
-    component.ngOnInit()
-    expect(component.challenges).toBeUndefined()
-    expect(console.log).toHaveBeenCalledWith('Error')
-  }))
-
-  it('should solve the score board challenge if it is solved', () => {
-    challengeService.find.and.returnValue(of([ { name: 'Score Board', solved: false } ]))
-    component.ngOnInit()
-    expect(component.challenges[0].solved).toBe(true)
-  })
-
-  it('should return an empty array if challenges has a falsy value while filtering datasource', () => {
-    let value = component.filterToDataSource(null,null,null)
-    expect(value).toEqual([])
-  })
-
-  it('should return an empty array if challenges has a falsy value while filtering challenges by difficulty', () => {
-    component.challenges = null
-    let value = component.filterChallengesByDifficulty(null)
-    expect(value).toEqual([])
-  })
-
-  it('should return an empty array if challenges has a falsy value while filtering solved challenges by difficulty', () => {
-    component.challenges = null
-    let value = component.filterSolvedChallengesOfDifficulty(null)
-    expect(value).toEqual([])
-  })
-
-  it('should complete a level when all challenges of that difficulty are solved', () => {
-    challengeService.find.and.returnValue(of([ { solved: true, difficulty: 3 }, { solved: true, difficulty: 3 }, { solved: true, difficulty: 3 }, { solved: true, difficulty: 3 } ]))
-    component.ngOnInit()
-    expect(component.offsetValue[2]).toBe('0%')
-  })
-
-  it('should update the correct challenge when a challenge solved event occurs', () => {
-    challengeService.find.and.returnValue(of([{ name: 'Challenge #1', solved: false }, { name: 'Challenge #2', solved: false } ]))
-    spyOn(mockSocket,'on')
-    component.ngOnInit()
-    let callback = mockSocket.on.calls.argsFor(0)[1]
-    callback({ challenge: 'ping', name: 'Challenge #1' })
-    expect(component.challenges[ 0 ].solved).toBe(true)
-    expect(component.challenges[ 1 ].solved).toBe(false)
-  })
-
-  it('should not update when a challenge solved event to a nonexistent challenge occurs', () => {
-    challengeService.find.and.returnValue(of([{ name: 'Challenge #1', solved: false }, { name: 'Challenge #2', solved: false } ]))
-    spyOn(mockSocket,'on')
-    component.ngOnInit()
-    let callback = mockSocket.on.calls.argsFor(0)[1]
-    callback({ challenge: 'ping', name: 'Challenge #1337' })
-    expect(component.challenges[ 0 ].solved).toBe(false)
-    expect(component.challenges[ 1 ].solved).toBe(false)
-  })
-
-  it('should be possible when challenge-solved notifications are shown with CTF flag codes', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({  'ctf': { 'showFlagsInNotifications': true }, 'application': { 'showChallengeSolvedNotifications': true } }))
-    component.ngOnInit()
-    expect(component.allowRepeatNotifications).toBe(true)
-  })
-
-  it('should not be possible when challenge-solved notifications are shown without CTF flag codes', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'ctf': { 'showFlagsInNotifications': false }, 'application': { 'showChallengeSolvedNotifications': true } }))
-    component.ngOnInit()
-    expect(component.allowRepeatNotifications).toBe(false)
-  })
-
-  it('should not be possible when challenge-solved notifications are not shown', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'application': { 'showChallengeSolvedNotifications': false } }))
-    component.ngOnInit()
-    expect(component.allowRepeatNotifications).toBe(false)
-  })
-
-  it('should show notification for selected challenge when enabled', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'ctf': { 'showFlagsInNotifications': true }, 'application': { 'showChallengeSolvedNotifications': true } }))
-    component.ngOnInit()
-    component.repeatNotification({ name: 'Challenge #1', solved: true })
-    expect(challengeService.repeatNotification).toHaveBeenCalledWith(encodeURIComponent('Challenge #1'))
-  })
-
-  it('should scroll to top of screen when notification is repeated', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'ctf': { 'showFlagsInNotifications': true }, 'application': { 'showChallengeSolvedNotifications': true } }))
-    spyOn(windowRefService.nativeWindow,'scrollTo')
-    component.ngOnInit()
-    component.repeatNotification({ name: 'Challenge #1', solved: true })
-    expect(windowRefService.nativeWindow.scrollTo).toHaveBeenCalledWith(0, 0)
-  })
-
-  it('should log the error from backend on failing to repeat notification', fakeAsync(() => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'ctf': { 'showFlagsInNotifications': true }, 'application': { 'showChallengeSolvedNotifications': true } }))
-    challengeService.repeatNotification.and.returnValue(throwError('Error'))
-    console.log = jasmine.createSpy('log')
-    component.ngOnInit()
-    component.repeatNotification({ name: 'Challenge #1', solved: true })
-    expect(console.log).toHaveBeenCalledWith('Error')
-  }))
-
-  it('should happen when challenge has a hint URL', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'application': { 'showChallengeHints': true } }))
-    spyOn(windowRefService.nativeWindow,'open')
-    component.ngOnInit()
-    component.openHint({ name: 'Challenge #1', hintUrl: 'hint://c1.test' })
-    expect(windowRefService.nativeWindow.open).toHaveBeenCalledWith('hint://c1.test', '_blank')
-  })
-
-  it('should not happen when challenge has no hint URL', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'application': { 'showChallengeHints': true } }))
-    spyOn(windowRefService.nativeWindow,'open')
-    component.ngOnInit()
-    component.openHint({ name: 'Challenge #2' })
-    expect(windowRefService.nativeWindow.open).not.toHaveBeenCalled()
-  })
-
-  it('should not happen when hints are not turned on in configuration', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'application': { 'showChallengeHints': false } }))
-    spyOn(windowRefService.nativeWindow,'open')
-    component.ngOnInit()
-    component.openHint({ name: 'Challenge #1', hintUrl: 'hint://c1.test' })
-    expect(windowRefService.nativeWindow.open).not.toHaveBeenCalled()
-  })
-
-  it('should be empty for challenge with neither hint text nor URL', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'application': { 'showChallengeHints': true } }))
-    challengeService.find.and.returnValue(of([ { name: 'Challenge' } ]))
-    component.ngOnInit()
-    expect(component.challenges[0].hint).toBeUndefined()
-  })
-
-  it('should remain unchanged for challenge with a hint text but no hint URL', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'application': { 'showChallengeHints': true } }))
-    challengeService.find.and.returnValue(of([ { name: 'Challenge', hint: 'Hint' }]))
-    component.ngOnInit()
-    expect(component.challenges[0].hint).toBe('Hint')
-  })
-
-  it('should append click-me text for challenge with a hint text and URL', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'application': { 'showChallengeHints': true } }))
-    challengeService.find.and.returnValue(of([{ name: 'Challenge', hint: 'Hint.', hintUrl: 'http://hi.nt' } ]))
-    component.ngOnInit()
-    expect(component.challenges[0].hint).toBe('Hint. Click for more hints.')
-  })
-
-  it('should become click-me text for challenge without a hint text but with hint URL', () => {
-    configurationService.getApplicationConfiguration.and.returnValue(of({ 'application': { 'showChallengeHints': true } }))
-    challengeService.find.and.returnValue(of([{ name: 'Challenge', hintUrl: 'http://hi.nt' }]))
-    component.ngOnInit()
-    expect(component.challenges[0].hint).toBe('Click to open hints.')
-  })
-
 })

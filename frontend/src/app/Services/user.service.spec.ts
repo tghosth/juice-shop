@@ -1,14 +1,19 @@
-import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing'
+/*
+ * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * SPDX-License-Identifier: MIT
+ */
+
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { fakeAsync, inject, TestBed, tick } from '@angular/core/testing'
 
 import { UserService } from './user.service'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
 
 describe('UserService', () => {
   beforeEach(() => {
-
     TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule],
-      providers: [UserService]
+      imports: [],
+      providers: [UserService, provideHttpClient(withInterceptorsFromDi()), provideHttpClientTesting()]
     })
   })
 
@@ -18,8 +23,8 @@ describe('UserService', () => {
 
   it('should get all users directly from the rest api', inject([UserService, HttpTestingController],
     fakeAsync((service: UserService, httpMock: HttpTestingController) => {
-      let res
-      service.find().subscribe((data) => res = data)
+      let res: any
+      service.find().subscribe((data) => (res = data))
 
       const req = httpMock.expectOne('http://localhost:3000/rest/user/authentication-details/')
       req.flush({ data: 'apiResponse' })
@@ -34,8 +39,8 @@ describe('UserService', () => {
 
   it('should get single users directly from the rest api', inject([UserService, HttpTestingController],
     fakeAsync((service: UserService, httpMock: HttpTestingController) => {
-      let res
-      service.get(1).subscribe((data) => res = data)
+      let res: any
+      service.get(1).subscribe((data) => (res = data))
 
       const req = httpMock.expectOne('http://localhost:3000/api/Users/1')
       req.flush({ data: 'apiResponse' })
@@ -49,8 +54,8 @@ describe('UserService', () => {
 
   it('should create user directly via the rest api', inject([UserService, HttpTestingController],
     fakeAsync((service: UserService, httpMock: HttpTestingController) => {
-      let res
-      service.save(null).subscribe((data) => res = data)
+      let res: any
+      service.save(null).subscribe((data) => (res = data))
 
       const req = httpMock.expectOne('http://localhost:3000/api/Users/')
       req.flush({ data: 'apiResponse' })
@@ -65,8 +70,8 @@ describe('UserService', () => {
 
   it('should login user directly via the rest api', inject([UserService, HttpTestingController],
     fakeAsync((service: UserService, httpMock: HttpTestingController) => {
-      let res
-      service.login(null).subscribe((data) => res = data)
+      let res: any
+      service.login(null).subscribe((data) => (res = data))
 
       const req = httpMock.expectOne('http://localhost:3000/rest/user/login')
       req.flush({ authentication: 'apiResponse' })
@@ -81,8 +86,8 @@ describe('UserService', () => {
 
   it('should change user password directly via the rest api', inject([UserService, HttpTestingController],
     fakeAsync((service: UserService, httpMock: HttpTestingController) => {
-      let res
-      service.changePassword({ current: 'foo', new: 'bar', repeat: 'bar' }).subscribe((data) => res = data)
+      let res: any
+      service.changePassword({ current: 'foo', new: 'bar', repeat: 'bar' }).subscribe((data) => (res = data))
 
       const req = httpMock.expectOne('http://localhost:3000/rest/user/change-password?current=foo&new=bar&repeat=bar')
       req.flush({ user: 'apiResponse' })
@@ -96,8 +101,8 @@ describe('UserService', () => {
 
   it('should return the logged-in users identity directly from the rest api', inject([UserService, HttpTestingController],
     fakeAsync((service: UserService, httpMock: HttpTestingController) => {
-      let res
-      service.whoAmI().subscribe((data) => res = data)
+      let res: any
+      service.whoAmI().subscribe((data) => (res = data))
 
       const req = httpMock.expectOne('http://localhost:3000/rest/user/whoami')
       req.flush({ user: 'apiResponse' })
@@ -111,9 +116,9 @@ describe('UserService', () => {
 
   it('should reset the password directly from the rest api', inject([UserService, HttpTestingController],
     fakeAsync((service: UserService, httpMock: HttpTestingController) => {
-      let res
-      let mockObject = { req: 'apiRequest' }
-      service.resetPassword(mockObject).subscribe((data) => res = data)
+      let res: any
+      const mockObject = { req: 'apiRequest' }
+      service.resetPassword(mockObject).subscribe((data) => (res = data))
 
       const req = httpMock.expectOne('http://localhost:3000/rest/user/reset-password')
       req.flush({ user: 'apiResponse' })
@@ -121,6 +126,32 @@ describe('UserService', () => {
 
       expect(req.request.method).toBe('POST')
       expect(req.request.body).toEqual(mockObject)
+      expect(res).toBe('apiResponse')
+      httpMock.verify()
+    })
+  ))
+
+  it('should get users deluxe status directly from the rest api', inject([UserService, HttpTestingController],
+    fakeAsync((service: UserService, httpMock: HttpTestingController) => {
+      let res
+      service.deluxeStatus().subscribe((data) => (res = data))
+      const req = httpMock.expectOne('http://localhost:3000/rest/deluxe-membership')
+      req.flush({ data: 'apiResponse' })
+      tick()
+      expect(req.request.method).toBe('GET')
+      expect(res).toBe('apiResponse')
+      httpMock.verify()
+    })
+  ))
+
+  it('should upgrade users deluxe status directly from the rest api', inject([UserService, HttpTestingController],
+    fakeAsync((service: UserService, httpMock: HttpTestingController) => {
+      let res
+      service.upgradeToDeluxe('wallet', null).subscribe((data) => (res = data))
+      const req = httpMock.expectOne('http://localhost:3000/rest/deluxe-membership')
+      req.flush({ data: 'apiResponse' })
+      tick()
+      expect(req.request.method).toBe('POST')
       expect(res).toBe('apiResponse')
       httpMock.verify()
     })

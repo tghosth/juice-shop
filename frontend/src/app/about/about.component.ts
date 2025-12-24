@@ -1,30 +1,49 @@
-import { Component, OnInit } from '@angular/core'
+/*
+ * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * SPDX-License-Identifier: MIT
+ */
+
+import { Component, type OnInit, inject } from '@angular/core'
 import { DomSanitizer } from '@angular/platform-browser'
 import { ConfigurationService } from '../Services/configuration.service'
 import { FeedbackService } from '../Services/feedback.service'
-import { IImage } from 'ng-simple-slideshow'
-import { library, dom } from '@fortawesome/fontawesome-svg-core'
-import { faFacebook, faTwitter, faSlack } from '@fortawesome/free-brands-svg-icons'
+import { Gallery, type GalleryRef, GalleryComponent, GalleryImageDef } from 'ng-gallery'
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { faFacebook, faMastodon, faReddit, faSlack, faTwitter } from '@fortawesome/free-brands-svg-icons'
 import { faNewspaper, faStar } from '@fortawesome/free-regular-svg-icons'
-import { faStar as fasStar } from '@fortawesome/free-solid-svg-icons'
+import { faStar as fasStar, faPalette, faBold } from '@fortawesome/free-solid-svg-icons'
+import { catchError } from 'rxjs/operators'
+import { EMPTY } from 'rxjs'
+import { MatButtonModule } from '@angular/material/button'
 
-library.add(faFacebook, faTwitter, faSlack, faNewspaper, faStar, fasStar)
-dom.watch()
+import { TranslateModule } from '@ngx-translate/core'
+import { MatCardModule } from '@angular/material/card'
+
+library.add(faFacebook, faTwitter, faSlack, faReddit, faNewspaper, faStar, fasStar, faPalette, faMastodon, faBold)
 
 @Component({
   selector: 'app-about',
   templateUrl: './about.component.html',
-  styleUrls: ['./about.component.scss']
+  styleUrls: ['./about.component.scss'],
+  imports: [MatCardModule, TranslateModule, GalleryComponent, GalleryImageDef, MatButtonModule]
 })
 export class AboutComponent implements OnInit {
+  private readonly configurationService = inject(ConfigurationService);
+  private readonly feedbackService = inject(FeedbackService);
+  private readonly sanitizer = inject(DomSanitizer);
+  private readonly gallery = inject(Gallery);
 
-  public twitterUrl = null
-  public facebookUrl = null
-  public slackUrl = null
-  public pressKitUrl = null
-  public slideshowDataSource: IImage[] = []
+  public blueSkyUrl?: string
+  public mastodonUrl?: string
+  public twitterUrl?: string
+  public facebookUrl?: string
+  public slackUrl?: string
+  public redditUrl?: string
+  public pressKitUrl?: string
+  public nftUrl?: string
+  public galleryRef: GalleryRef
 
-  private images = [
+  private readonly images = [
     'assets/public/images/carousel/1.jpg',
     'assets/public/images/carousel/2.jpg',
     'assets/public/images/carousel/3.jpg',
@@ -34,7 +53,7 @@ export class AboutComponent implements OnInit {
     'assets/public/images/carousel/7.jpg'
   ]
 
-  private stars = [
+  private readonly stars = [
     null,
     '<i class="fas fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i>',
     '<i class="fas fa-star"></i><i class="fas fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i><i class="far fa-star"></i>',
@@ -43,37 +62,69 @@ export class AboutComponent implements OnInit {
     '<i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>'
   ]
 
-  constructor (private configurationService: ConfigurationService, private feedbackService: FeedbackService, private sanitizer: DomSanitizer) {}
-
-  ngOnInit () {
+  ngOnInit (): void {
+    this.galleryRef = this.gallery.ref('feedback-gallery')
     this.populateSlideshowFromFeedbacks()
-    this.configurationService.getApplicationConfiguration().subscribe((config) => {
-      if (config && config.application) {
-        if (config.application.twitterUrl !== null) {
-          this.twitterUrl = config.application.twitterUrl
+    this.configurationService.getApplicationConfiguration()
+      .pipe(
+        catchError((err) => {
+          console.error(err)
+          return EMPTY
+        })
+      ).subscribe((config) => {
+        if (config?.application?.social) {
+          if (config.application.social.blueSkyUrl) {
+            this.blueSkyUrl = config.application.social.blueSkyUrl
+          }
+          if (config.application.social.mastodonUrl) {
+            this.mastodonUrl = config.application.social.mastodonUrl
+          }
+          if (config.application.social.twitterUrl) {
+            this.twitterUrl = config.application.social.twitterUrl
+          }
+          if (config.application.social.facebookUrl) {
+            this.facebookUrl = config.application.social.facebookUrl
+          }
+          if (config.application.social.slackUrl) {
+            this.slackUrl = config.application.social.slackUrl
+          }
+          if (config.application.social.redditUrl) {
+            this.redditUrl = config.application.social.redditUrl
+          }
+          if (config.application.social.pressKitUrl) {
+            this.pressKitUrl = config.application.social.pressKitUrl
+          }
+          if (config.application.social.nftUrl) {
+            this.nftUrl = config.application.social.nftUrl
+          }
         }
-        if (config.application.facebookUrl !== null) {
-          this.facebookUrl = config.application.facebookUrl
-        }
-        if (config.application.slackUrl !== null) {
-          this.slackUrl = config.application.slackUrl
-        }
-        if (config.application.pressKitUrl !== null) {
-          this.pressKitUrl = config.application.pressKitUrl
-        }
-      }
-    },(err) => console.log(err))
+      })
   }
 
   populateSlideshowFromFeedbacks () {
-    this.feedbackService.find().subscribe((feedbacks) => {
-      for (let i = 0; i < feedbacks.length; i++) {
-        feedbacks[i].comment = feedbacks[i].comment + ' (' + this.stars[feedbacks[i].rating] + ')'
-        feedbacks[i].comment = this.sanitizer.bypassSecurityTrustHtml(feedbacks[i].comment)
-        this.slideshowDataSource.push({ url: this.images[i % this.images.length], caption: feedbacks[i].comment })
-      }
-    },(err) => {
-      console.log(err)
-    })
+    this.feedbackService
+      .find()
+      .pipe(
+        catchError((err) => {
+          console.error(err)
+          return EMPTY
+        })
+      )
+      .subscribe((feedbacks) => {
+        for (let i = 0; i < feedbacks.length; i++) {
+
+          feedbacks[i].comment = `<figcaption><p style="margin-bottom: 0;">${
+            feedbacks[i].comment
+          }</p><div class="feedback-stars">(${this.stars[feedbacks[i].rating]})</div></figcaption>`
+          feedbacks[i].comment = this.sanitizer.bypassSecurityTrustHtml(
+            feedbacks[i].comment
+          )
+
+          this.galleryRef.addImage({
+            src: this.images[i % this.images.length],
+            args: feedbacks[i].comment
+          })
+        }
+      })
   }
 }

@@ -1,14 +1,19 @@
-import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing'
+/*
+ * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * SPDX-License-Identifier: MIT
+ */
+
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing'
 import { fakeAsync, inject, TestBed, tick } from '@angular/core/testing'
 
 import { ProductReviewService } from './product-review.service'
+import { provideHttpClient, withInterceptorsFromDi } from '@angular/common/http'
 
 describe('ProductReviewService', () => {
   beforeEach(() => {
-
     TestBed.configureTestingModule({
-      imports: [HttpClientTestingModule],
-      providers: [ProductReviewService]
+      imports: [],
+      providers: [ProductReviewService, provideHttpClient(withInterceptorsFromDi()), provideHttpClientTesting()]
     })
   })
 
@@ -18,9 +23,9 @@ describe('ProductReviewService', () => {
 
   it('should get product reviews directly via the rest api', inject([ProductReviewService, HttpTestingController],
     fakeAsync((service: ProductReviewService, httpMock: HttpTestingController) => {
-      let res
-      service.get(42).subscribe((data) => res = data)
-      const req = httpMock.expectOne('http://localhost:3000/rest/product/42/reviews')
+      let res: any
+      service.get(42).subscribe((data) => (res = data))
+      const req = httpMock.expectOne('http://localhost:3000/rest/products/42/reviews')
       req.flush({ data: 'apiResponse' })
 
       tick()
@@ -32,14 +37,14 @@ describe('ProductReviewService', () => {
 
   it('should create product reviews directly via the rest api', inject([ProductReviewService, HttpTestingController],
     fakeAsync((service: ProductReviewService, httpMock: HttpTestingController) => {
-      let res
-      service.create(42,{}).subscribe((data) => res = data)
-      const req = httpMock.expectOne('http://localhost:3000/rest/product/42/reviews')
+      let res: any
+      service.create(42, { message: 'A', author: 'B' }).subscribe((data: any) => (res = data))
+      const req = httpMock.expectOne('http://localhost:3000/rest/products/42/reviews')
       req.flush({ data: 'apiResponse' })
 
       tick()
       expect(req.request.method).toBe('PUT')
-      expect(req.request.body).toEqual({})
+      expect(req.request.body).toEqual({ message: 'A', author: 'B' })
       expect(res).toBe('apiResponse')
       httpMock.verify()
     })
@@ -47,9 +52,9 @@ describe('ProductReviewService', () => {
 
   it('should edit product reviews directly via the rest api', inject([ProductReviewService, HttpTestingController],
     fakeAsync((service: ProductReviewService, httpMock: HttpTestingController) => {
-      let res
-      service.patch(null).subscribe((data) => res = data)
-      const req = httpMock.expectOne('http://localhost:3000/rest/product/reviews')
+      let res: any
+      service.patch(null as unknown as { id: string, message: string }).subscribe((data: any) => (res = data))
+      const req = httpMock.expectOne('http://localhost:3000/rest/products/reviews')
       req.flush({ data: 'apiResponse' })
 
       tick()

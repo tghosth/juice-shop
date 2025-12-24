@@ -1,55 +1,66 @@
-import { CookieService } from 'ngx-cookie'
+/*
+ * Copyright (c) 2014-2026 Bjoern Kimminich & the OWASP Juice Shop contributors.
+ * SPDX-License-Identifier: MIT
+ */
+
+import { CookieService } from 'ngy-cookie'
 import { WindowRefService } from '../Services/window-ref.service'
-import { Router } from '@angular/router'
-import { Component, OnInit } from '@angular/core'
-import { FormControl, Validators } from '@angular/forms'
-import { library, dom } from '@fortawesome/fontawesome-svg-core'
+import { Router, RouterLink } from '@angular/router'
+import { Component, NgZone, type OnInit, inject } from '@angular/core'
+import { UntypedFormControl, Validators, FormsModule, ReactiveFormsModule } from '@angular/forms'
+import { library } from '@fortawesome/fontawesome-svg-core'
 import { UserService } from '../Services/user.service'
-import { faKey, faEye, faEyeSlash } from '@fortawesome/free-solid-svg-icons'
+import { faEye, faEyeSlash, faKey } from '@fortawesome/free-solid-svg-icons'
 import { faGoogle } from '@fortawesome/free-brands-svg-icons'
 import { FormSubmitService } from '../Services/form-submit.service'
+import { ConfigurationService } from '../Services/configuration.service'
+import { BasketService } from '../Services/basket.service'
+import { MatCheckbox } from '@angular/material/checkbox'
+import { MatIconModule } from '@angular/material/icon'
+import { MatTooltip } from '@angular/material/tooltip'
+import { MatIconButton, MatButtonModule } from '@angular/material/button'
+import { MatInputModule } from '@angular/material/input'
+import { TranslateModule } from '@ngx-translate/core'
+import { MatFormFieldModule, MatLabel, MatError, MatSuffix } from '@angular/material/form-field'
+
+import { MatCardModule } from '@angular/material/card'
 
 library.add(faKey, faEye, faEyeSlash, faGoogle)
-dom.watch()
 
 const oauthProviderUrl = 'https://accounts.google.com/o/oauth2/v2/auth'
-const clientId = '1005568560502-6hm16lef8oh46hr2d98vf2ohlnj4nfhq.apps.googleusercontent.com'
-
-const authorizedRedirectURIs = {
-  'http://demo.owasp-juice.shop': 'http://demo.owasp-juice.shop',
-  'https://juice-shop.herokuapp.com': 'https://juice-shop.herokuapp.com',
-  'http://juice-shop.herokuapp.com': 'http://juice-shop.herokuapp.com',
-  'http://preview.owasp-juice.shop': 'http://preview.owasp-juice.shop',
-  'https://juice-shop-staging.herokuapp.com': 'https://juice-shop-staging.herokuapp.com',
-  'http://juice-shop-staging.herokuapp.com': 'http://juice-shop-staging.herokuapp.com',
-  'http://localhost:3000': 'http://local3000.owasp-juice.shop',
-  'http://127.0.0.1:3000': 'http://local3000.owasp-juice.shop',
-  'http://localhost:4200': 'http://local4200.owasp-juice.shop',
-  'http://127.0.0.1:4200': 'http://local4200.owasp-juice.shop',
-  'http://192.168.99.100:3000': 'http://localMac.owasp-juice.shop',
-  'https://juice-shop-v8.herokuapp.com': 'https://juice-shop-v8.herokuapp.com',
-  'http://juice-shop-v8.herokuapp.com': 'http://juice-shop-v8.herokuapp.com'
-}
 
 @Component({
   selector: 'app-login',
   templateUrl: './login.component.html',
-  styleUrls: ['./login.component.scss']
+  styleUrls: ['./login.component.scss'],
+  imports: [MatCardModule, MatFormFieldModule, MatLabel, TranslateModule, MatInputModule, FormsModule, ReactiveFormsModule, MatError, MatIconButton, MatSuffix, MatTooltip, RouterLink, MatButtonModule, MatIconModule, MatCheckbox]
 })
-export class LoginComponent implements OnInit {
 
-  public emailControl = new FormControl('', [Validators.required])
-  public passwordControl = new FormControl('', [Validators.required])
+export class LoginComponent implements OnInit {
+  private readonly configurationService = inject(ConfigurationService);
+  private readonly userService = inject(UserService);
+  private readonly windowRefService = inject(WindowRefService);
+  private readonly cookieService = inject(CookieService);
+  private readonly router = inject(Router);
+  private readonly formSubmitService = inject(FormSubmitService);
+  private readonly basketService = inject(BasketService);
+  private readonly ngZone = inject(NgZone);
+
+  public emailControl = new UntypedFormControl('', [Validators.required])
+
+  public passwordControl = new UntypedFormControl('', [Validators.required, Validators.minLength(1)])
+
   public hide = true
   public user: any
-  public rememberMe: FormControl = new FormControl(false)
+  public rememberMe: UntypedFormControl = new UntypedFormControl(false)
   public error: any
-  public oauthUnavailable: any
-  public redirectUri
-  constructor (private userService: UserService, private windowRefService: WindowRefService, private cookieService: CookieService, private router: Router, private formSubmitService: FormSubmitService) { }
+  public clientId = '1005568560502-6hm16lef8oh46hr2d98vf2ohlnj4nfhq.apps.googleusercontent.com'
+  public oauthUnavailable = true
+  public redirectUri = ''
+  public testingUsername = 'testing@juice-sh.op'
+  public testingPassword = 'IamUsedForTesting'
 
-  ngOnInit () {
-
+  ngOnInit (): void {
     const email = localStorage.getItem('email')
     if (email) {
       this.user = {}
@@ -59,39 +70,57 @@ export class LoginComponent implements OnInit {
       this.rememberMe.setValue(false)
     }
 
-    this.redirectUri = this.windowRefService.nativeWindow.location.protocol + '//' + this.windowRefService.nativeWindow.location.host
-    this.oauthUnavailable = !authorizedRedirectURIs[this.redirectUri]
-    if (this.oauthUnavailable) {
-      console.log(this.redirectUri + ' is not an authorized redirect URI for this application.')
-    }
 
-    this.formSubmitService.attachEnterKeyHandler('login-form', 'loginButton', () => this.login())
+    this.redirectUri = `${this.windowRefService.nativeWindow.location.protocol}//${this.windowRefService.nativeWindow.location.host}`
+    this.configurationService.getApplicationConfiguration().subscribe({
+      next: (config) => {
+        if (config?.application?.googleOauth) {
+          this.clientId = config.application.googleOauth.clientId
+          const authorizedRedirect = config.application.googleOauth.authorizedRedirects.find(r => r.uri === this.redirectUri)
+          if (authorizedRedirect) {
+            this.oauthUnavailable = false
+            this.redirectUri = authorizedRedirect.proxy ? authorizedRedirect.proxy : authorizedRedirect.uri
+          } else {
+            this.oauthUnavailable = true
+            console.log(this.redirectUri + ' is not an authorized redirect URI for this application.')
+          }
+        }
+      },
+      error: (err) => { console.log(err) }
+    })
+
+    this.formSubmitService.attachEnterKeyHandler('login-form', 'loginButton', () => { this.login() })
   }
 
   login () {
-
     this.user = {}
     this.user.email = this.emailControl.value
     this.user.password = this.passwordControl.value
-    this.userService.login(this.user).subscribe((authentication: any) => {
-      localStorage.setItem('token', authentication.token)
-      this.cookieService.put('token', authentication.token)
-      sessionStorage.setItem('bid', authentication.bid)
-      /*Use userService to notifiy if user has logged in*/
-      /*this.userService.isLoggedIn = true;*/
-      this.userService.isLoggedIn.next(true)
-      this.router.navigate(['/search'])
-    }, (error) => {
-      console.log(error)
-      localStorage.removeItem('token')
-      this.cookieService.remove('token', { domain: document.domain })
-      sessionStorage.removeItem('bid')
-      this.error = error
-      /* Use userService to notify user failed to log in */
-      /*this.userServe.isLoggedIn = false;*/
-      this.userService.isLoggedIn.next(false)
-      this.emailControl.markAsPristine()
-      this.passwordControl.markAsPristine()
+    this.userService.login(this.user).subscribe({
+      next: (authentication: any) => {
+        localStorage.setItem('token', authentication.token)
+        const expires = new Date()
+        expires.setHours(expires.getHours() + 8)
+        this.cookieService.put('token', authentication.token, { expires })
+        sessionStorage.setItem('bid', authentication.bid)
+        this.basketService.updateNumberOfCartItems()
+        this.userService.isLoggedIn.next(true)
+        this.ngZone.run(async () => await this.router.navigate(['/search']))
+      },
+      error: ({ error }) => {
+        if (error.status && error.data && error.status === 'totp_token_required') {
+          localStorage.setItem('totp_tmp_token', error.data.tmpToken)
+          this.ngZone.run(async () => await this.router.navigate(['/2fa/enter']))
+          return
+        }
+        localStorage.removeItem('token')
+        this.cookieService.remove('token')
+        sessionStorage.removeItem('bid')
+        this.error = error
+        this.userService.isLoggedIn.next(false)
+        this.emailControl.markAsPristine()
+        this.passwordControl.markAsPristine()
+      }
     })
 
     if (this.rememberMe.value) {
@@ -99,18 +128,9 @@ export class LoginComponent implements OnInit {
     } else {
       localStorage.removeItem('email')
     }
-
-    if (this.error && this.user.email && this.user.email.match(/support@.*/)) {
-      console.log('@echipa de suport: Secretul nostru comun este încă Caoimhe cu parola de master gol!')
-    }
   }
 
   googleLogin () {
-
-    this.windowRefService.nativeWindow.location.replace(oauthProviderUrl + '?client_id='
-      + clientId + '&response_type=token&scope=email&redirect_uri='
-      + authorizedRedirectURIs[this.redirectUri])
-
+    this.windowRefService.nativeWindow.location.replace(`${oauthProviderUrl}?client_id=${this.clientId}&response_type=token&scope=email&redirect_uri=${this.redirectUri}`)
   }
-
 }
