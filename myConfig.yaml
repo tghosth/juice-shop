@@ -1,0 +1,6 @@
+challenges:
+  safetyMode: enabled
+  showSolvedNotifications: false
+
+ctf:
+  showFlagsInNotifications: false

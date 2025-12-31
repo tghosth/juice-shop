@@ -9,7 +9,7 @@ services:
     expose:
       - "3000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=myConfig
     restart: unless-stopped
     healthcheck:
       # Distroless image has node but no shell or wget; use fetch for health probing.
