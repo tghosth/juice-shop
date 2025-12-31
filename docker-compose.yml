@@ -36,19 +36,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  certbot:
-    image: certbot/certbot:latest
-    container_name: juice-shop-certbot
-    volumes:
-      - ./certs:/etc/letsencrypt
-      - ./www:/var/www/certbot:rw
-    networks:
-      - juice-shop-network
-    entrypoint: /bin/sh -c "certbot renew --webroot -w /var/www/certbot --quiet && sleep infinite"
-    restart: unless-stopped
-    profiles:
-      - certbot
-
 networks:
   juice-shop-network:
     driver: bridge
